@@ -30,7 +30,6 @@ app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html')
 });
 
-// Crear un nuevo usuario
 app.post('/api/users', async (req, res) => {
   try {
     const newUser = new User({ username: req.body.username });
@@ -41,7 +40,6 @@ app.post('/api/users', async (req, res) => {
   }
 });
 
-// Obtener todos los usuarios
 app.get('/api/users', async (req, res) => {
   try {
     const users = await User.find({});
@@ -51,7 +49,6 @@ app.get('/api/users', async (req, res) => {
   }
 });
 
-// Agregar un ejercicio a un usuario
 app.post("/api/users/:_id/exercises", async (req, res) => {
   try {
     const user = await User.findById(req.params._id);
@@ -80,7 +77,6 @@ app.post("/api/users/:_id/exercises", async (req, res) => {
   }
 });
 
-// Obtener el log de ejercicios de un usuario
 app.get('/api/users/:_id/logs', async (req, res) => {
   try {
     const userId = req.params._id;
