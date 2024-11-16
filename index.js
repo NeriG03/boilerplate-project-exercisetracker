@@ -84,11 +84,11 @@ app.post('/api/users/:_id/exercises', (req, res) => {
   }
   exercises.push(newExercise)
   res.json({
-    _id: user._id,
     username: user.username,
-    date: newExercise.date,
+    description: newExercise.description,
     duration: newExercise.duration,
-    description: newExercise.description
+    date: newExercise.date,
+    _id: user._id
   })
 })
 
