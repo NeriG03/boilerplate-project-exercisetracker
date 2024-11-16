@@ -2,76 +2,118 @@ const express = require('express')
 const app = express()
 const cors = require('cors')
 require('dotenv').config()
+let bodyParser = require('body-parser');
+
+
+const mongoose = require('mongoose');
+
+const userSchema = new mongoose.Schema({
+  username: { type: String, required: true }
+});
+
+const exerciseSchema = new mongoose.Schema({
+  userId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  description: { type: String, required: true },
+  duration: { type: Number, required: true },
+  date: { type: Date, required: true }
+});
+
+const User = mongoose.model('User', userSchema);
+const Exercise = mongoose.model('Exercise', exerciseSchema);
+
+module.exports = { User, Exercise };
+
+mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
 
 app.use(cors())
 app.use(express.static('public'))
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
-
-const users = []
-const exercises = []
+app.use("/", bodyParser.urlencoded({ extended: false }));
 
 app.get('/', (req, res) => {
   res.sendFile(__dirname + '/views/index.html')
-})
+});
 
-app.post('/api/users', (req, res) => {
-  const { username } = req.body
-  const user = { username, _id: users.length.toString() }
-  users.push(user)
-  res.json(user)
-})
-
-app.get('/api/users', (req, res) => {
-  res.json(users)
-})
-
-app.post('/api/users/:_id/exercises', (req, res) => {
-  const { _id } = req.params
-  const { description, duration, date } = req.body
-  const user = users.find(user => user._id === _id)
-  if (!user) return res.status(404).send('User not found')
-
-  if (!description || !duration || isNaN(parseInt(duration))) {
-    return res.status(400).json({ error: 'Invalid input' })
+// Crear un nuevo usuario
+app.post('/api/users', async (req, res) => {
+  try {
+    const newUser = new User({ username: req.body.username });
+    await newUser.save();
+    res.json({ username: newUser.username, _id: newUser._id });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
+});
 
-  const exercise = {
-    description,
-    duration: parseInt(duration),
-    date: date ? new Date(date).toDateString() : new Date().toDateString()
+// Obtener todos los usuarios
+app.get('/api/users', async (req, res) => {
+  try {
+    const users = await User.find({});
+    res.json(users);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
-  exercises.push({ ...exercise, _id })
+});
 
-  res.json({
-    username: user.username,
-    description: exercise.description,
-    duration: exercise.duration,
-    date: exercise.date,
-    _id: user._id
-  })
-})
+// Agregar un ejercicio a un usuario
+app.post('/api/users/:_id/exercises', async (req, res) => {
+  try {
+    const userId = req.params._id;
+    const { description, duration, date } = req.body;
+    const exerciseDate = date ? new Date(date) : new Date();
 
-app.get('/api/users/:_id/logs', (req, res) => {
-  const { _id } = req.params
-  const { from, to, limit } = req.query
-  const user = users.find(user => user._id === _id)
-  if (!user) return res.status(404).send('User not found')
-
-  let log = exercises
-    .filter(exercise => exercise._id === _id)
-    .map(({ description, duration, date }) => ({
+    const newExercise = new Exercise({
+      userId,
       description,
-      duration,
-      date: new Date(date).toDateString()
-    }))
+      duration: parseInt(duration),
+      date: exerciseDate
+    });
 
-  if (from) log = log.filter(exercise => new Date(exercise.date) >= new Date(from))
-  if (to) log = log.filter(exercise => new Date(exercise.date) <= new Date(to))
-  if (limit) log = log.slice(0, parseInt(limit))
+    await newExercise.save();
 
-  res.json({ ...user, count: log.length, log })
-})
+    const user = await User.findById(userId);
+    res.json({
+      username: user.username,
+      description: newExercise.description,
+      duration: newExercise.duration,
+      date: newExercise.date.toDateString(),
+      _id: user._id
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Obtener el log de ejercicios de un usuario
+app.get('/api/users/:_id/logs', async (req, res) => {
+  try {
+    const userId = req.params._id;
+    const { from, to, limit } = req.query;
+
+    let filter = { userId };
+    if (from || to) {
+      filter.date = {};
+      if (from) filter.date.$gte = new Date(from);
+      if (to) filter.date.$lte = new Date(to);
+    }
+
+    const exercises = await Exercise.find(filter).limit(parseInt(limit) || 0);
+    const user = await User.findById(userId);
+
+    res.json({
+      username: user.username,
+      count: exercises.length,
+      _id: user._id,
+      log: exercises.map(e => ({
+        description: e.description,
+        duration: e.duration,
+        date: e.date.toDateString()
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 const listener = app.listen(process.env.PORT || 3000, () => {
   console.log('Your app is listening on port ' + listener.address().port)
